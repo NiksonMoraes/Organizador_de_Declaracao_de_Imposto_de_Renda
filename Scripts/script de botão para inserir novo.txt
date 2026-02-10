@@ -1,0 +1,23 @@
+Sub CopiarInserir()
+    Dim ws As Worksheet
+    Dim rngOrigem As Range
+    Dim linhaDestino As Long
+    
+    ' Definir a planilha
+    Set ws = ThisWorkbook.Sheets("Planilha1")
+    
+    ' Definir o intervalo a ser copiado
+    Set rngOrigem = ws.Range("A1:C3") ' ajuste conforme necessário
+    
+    ' Definir a linha onde será inserido
+    linhaDestino = 5 ' ajuste conforme necessário
+    
+    ' Inserir espaço para os novos dados
+    ws.Rows(linhaDestino & ":" & linhaDestino + rngOrigem.Rows.Count - 1).Insert Shift:=xlDown
+    
+    ' Copiar e colar os dados
+    rngOrigem.Copy
+    ws.Cells(linhaDestino, 1).PasteSpecial Paste:=xlPasteAll
+    
+    Application.CutCopyMode = False
+End Sub
