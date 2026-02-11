@@ -1,0 +1,49 @@
+Option Explicit
+
+Public BankQueue As Collection
+
+Private Sub InitQueue()
+    If BankQueue Is Nothing Then Set BankQueue = New Collection
+End Sub
+
+Sub REMOVER_BANCO()
+    Dim item As Object
+    Dim ws As Worksheet
+    Dim rng As Range
+    
+    InitQueue
+    
+    If BankQueue.Count = 0 Then
+        MsgBox "A fila está vazia. Não há item para remover.", vbExclamation, "REMOVER BANCO"
+        Exit Sub
+    End If
+    
+    ' Pega o último item inserido
+    Set item = BankQueue(BankQueue.Count)
+    
+    ' Se o item tiver o endereço do destino, apaga o bloco colado
+    On Error GoTo SafeRemove
+    
+    If item.Exists("SheetName") And item.Exists("DestAddress") Then
+        Set ws = ThisWorkbook.Worksheets(CStr(item("SheetName")))
+        Set rng = ws.Range(CStr(item("DestAddress")))
+        
+        Application.ScreenUpdating = False
+        
+        ' Opção 1 (padrão): apaga conteúdo + formatação
+        rng.Clear
+        
+        ' Opção 2: apaga só os valores (mantém formato)
+        ' rng.ClearContents
+        
+        Application.ScreenUpdating = True
+    End If
+
+SafeRemove:
+    ' Remove o item da fila de qualquer forma
+    BankQueue.Remove BankQueue.Count
+    
+    MsgBox "Último item removido." & vbCrLf & _
+           "Itens restantes na fila: " & BankQueue.Count & ".", _
+           vbInformation, "REMOVER BANCO"
+End Sub

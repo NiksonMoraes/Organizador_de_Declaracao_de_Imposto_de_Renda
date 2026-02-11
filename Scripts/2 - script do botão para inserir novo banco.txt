@@ -1,0 +1,87 @@
+Option Explicit
+
+' Fila global de objetos (cada item será um dicionário com os valores de C e D)
+Public BankQueue As Collection
+
+' Inicializa a fila caso ainda não exista
+Private Sub InitQueue()
+    If BankQueue Is Nothing Then
+        Set BankQueue = New Collection
+    End If
+End Sub
+
+' Retorna a linha de topo onde o bloco (3 linhas) deve ser colado,
+' garantindo que será na "2ª célula vazia abaixo" (ou seja, salta 1 linha após o último preenchido)
+Private Function GetSecondEmptyTopRow(ws As Worksheet, col As Long, firstDataRow As Long) As Long
+    Dim lastUsed As Long
+    lastUsed = ws.Cells(ws.Rows.Count, col).End(xlUp).Row
+    
+    If lastUsed < firstDataRow Then
+        ' Ainda não há dados: primeira vazia é firstDataRow, segunda vazia é firstDataRow + 1
+        GetSecondEmptyTopRow = firstDataRow + 1
+    Else
+        ' Após o último preenchido, a primeira vazia é lastUsed + 1, a segunda vazia é lastUsed + 2
+        GetSecondEmptyTopRow = lastUsed + 2
+    End If
+End Function
+
+' ====== MACRO PRINCIPAL ======
+Sub INSERIR_NOVO_BANCO()
+    Dim ws As Worksheet
+    Dim src As Range
+    Dim targetTop As Long
+    Dim firstDataRow As Long
+    Dim item As Object ' Scripting.Dictionary
+    Dim arrC As Variant, arrD As Variant
+    
+    ' >>> Ajuste o nome da planilha se necessário <<<
+    Set ws = ThisWorkbook.Worksheets("INFORMES")
+    
+    ' >>> Ajuste o intervalo de origem se necessário <<<
+    Set src = ws.Range("C11:D13") ' 3 linhas x 2 colunas
+    
+    ' Linha inicial considerada para procurar “vazios” abaixo
+    ' (aqui assumimos que os dados começam em C11; se houver cabeçalhos acima, ajuste!)
+    firstDataRow = 11
+    
+    ' Garante que a fila esteja inicializada
+    InitQueue
+    
+    ' Cria o objeto (dicionário) com os valores de C e D
+    Set item = CreateObject("Scripting.Dictionary")
+    
+    ' Copia os valores para arrays (coluna C e coluna D)
+    arrC = Application.Transpose(src.Columns(1).Value)
+    arrD = Application.Transpose(src.Columns(2).Value)
+    
+    item("C") = arrC
+    item("D") = arrD
+    
+    ' Enfileira o objeto
+    BankQueue.Add item
+    
+    ' Calcula a 2ª célula vazia correspondente abaixo (topo do bloco de 3 linhas)
+    targetTop = GetSecondEmptyTopRow(ws, 3, firstDataRow)
+    Set dest = ws.Cells(targetTop, 3).Resize(3, 2)
+	
+	' Guardar onde colou (para permitir desfazer depois)
+	item("SheetName") = ws.Name
+	item("DestAddress") = dest.Address
+
+	
+    ' ==== COLA VALORES + FORMATAÇÃO ====
+    Application.ScreenUpdating = False
+    
+    src.Copy
+    dest.PasteSpecial Paste:=xlPasteFormats
+    dest.PasteSpecial Paste:=xlPasteValues
+    
+    Application.CutCopyMode = False
+    Application.ScreenUpdating = True
+	
+    ' Feedback visual
+    MsgBox "Bloco copiado e colado com formatação em " & dest.Address(False, False) & _
+           vbCrLf & "Itens na fila: " & BankQueue.Count & ".", _
+           vbInformation, "INSERIR NOVO BANCO"
+End Sub
+

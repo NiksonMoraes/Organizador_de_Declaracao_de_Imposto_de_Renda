@@ -1,0 +1,143 @@
+Option Explicit
+
+' Fila/Pilha de objetos (último a entrar = primeiro a sair)
+Public BankQueue As Collection
+
+' Inicializa a fila caso ainda não exista
+Private Sub InitQueue()
+    If BankQueue Is Nothing Then
+        Set BankQueue = New Collection
+    End If
+End Sub
+
+' Calcula a linha de topo para colar o bloco (3 linhas x 2 colunas),
+' sempre na "2ª célula vazia abaixo" (deixa uma linha em branco entre blocos).
+Private Function GetSecondEmptyTopRow(ws As Worksheet, col As Long, firstDataRow As Long) As Long
+    Dim lastUsed As Long
+    lastUsed = ws.Cells(ws.Rows.Count, col).End(xlUp).Row
+    
+    If lastUsed < firstDataRow Then
+        ' Se não houver dados ainda, a primeira vazia é firstDataRow,
+        ' a segunda vazia é firstDataRow + 1
+        GetSecondEmptyTopRow = firstDataRow + 1
+    Else
+        ' Depois do último preenchido:
+        ' primeira vazia = lastUsed + 1 / segunda vazia = lastUsed + 2
+        GetSecondEmptyTopRow = lastUsed + 2
+    End If
+End Function
+
+' =========================
+' BOTÃO: INSERIR NOVO BANCO
+' =========================
+Sub INSERIR_NOVO_BANCO()
+    Dim ws As Worksheet
+    Dim src As Range
+    Dim dest As Range
+    Dim targetTop As Long
+    Dim firstDataRow As Long
+    
+    Dim item As Object ' Scripting.Dictionary (late binding)
+    Dim arrC As Variant, arrD As Variant
+    
+    ' >>> AJUSTE AQUI o nome da aba, se necessário <<<
+    Set ws = ThisWorkbook.Worksheets("Planilha1")
+    
+    ' Origem fixa
+    Set src = ws.Range("C11:D13") ' 3 linhas x 2 colunas
+    
+    ' Primeira linha considerada para procurar vazios na coluna C
+    firstDataRow = 11
+    
+    InitQueue
+    
+    ' Monta objeto com os valores (para armazenar na fila)
+    Set item = CreateObject("Scripting.Dictionary")
+    
+    arrC = Application.Transpose(src.Columns(1).Value) ' C11:C13
+    arrD = Application.Transpose(src.Columns(2).Value) ' D11:D13
+    
+    item("C") = arrC
+    item("D") = arrD
+    
+    ' Define destino (topo do bloco)
+    targetTop = GetSecondEmptyTopRow(ws, 3, firstDataRow)
+    Set dest = ws.Cells(targetTop, 3).Resize(3, 2) ' coluna C = 3
+    
+    ' Guarda onde foi colado (para o REMOVER apagar exatamente o último bloco)
+    item("SheetName") = ws.Name
+    item("DestAddress") = dest.Address(False, False)
+    
+    ' Enfileira (na prática, LIFO: remove o último inserido)
+    BankQueue.Add item
+    
+    ' Cola VALORES + FORMATAÇÃO (sem selecionar)
+    Application.ScreenUpdating = False
+    
+    src.Copy
+    dest.PasteSpecial Paste:=xlPasteFormats
+    dest.PasteSpecial Paste:=xlPasteValues
+    
+    Application.CutCopyMode = False
+    Application.ScreenUpdating = True
+    
+    MsgBox "Bloco inserido em " & dest.Address(False, False) & vbCrLf & _
+           "Itens na fila: " & BankQueue.Count & ".", _
+           vbInformation, "INSERIR NOVO BANCO"
+End Sub
+
+' =====================
+' BOTÃO: REMOVER BANCO
+' (remove da fila e apaga o último bloco colado com CLEAR)
+' =====================
+Sub REMOVER_BANCO()
+    Dim item As Object
+    Dim ws As Worksheet
+    Dim rng As Range
+    
+    InitQueue
+    
+    If BankQueue.Count = 0 Then
+        MsgBox "A fila está vazia. Não há item para remover.", _
+               vbExclamation, "REMOVER BANCO"
+        Exit Sub
+    End If
+    
+    ' Pega o último item inserido
+    Set item = BankQueue(BankQueue.Count)
+    
+    ' Tenta apagar o último bloco colado
+    On Error GoTo FalhaAoApagar
+    
+    If item.Exists("SheetName") And item.Exists("DestAddress") Then
+        Set ws = ThisWorkbook.Worksheets(CStr(item("SheetName")))
+        Set rng = ws.Range(CStr(item("DestAddress")))
+        
+        Application.ScreenUpdating = False
+        
+        ' Apaga TUDO (valores + formatação + bordas, etc.)
+        rng.Clear
+        
+        Application.ScreenUpdating = True
+    End If
+    
+    ' Remove o item da fila
+    BankQueue.Remove BankQueue.Count
+    
+    MsgBox "Último item removido e bloco apagado." & vbCrLf & _
+           "Itens restantes na fila: " & BankQueue.Count & ".", _
+           vbInformation, "REMOVER BANCO"
+    Exit Sub
+
+FalhaAoApagar:
+    ' Mesmo se falhar para apagar (ex.: aba renomeada), remove da fila para não travar o processo
+    On Error Resume Next
+    BankQueue.Remove BankQueue.Count
+    Application.ScreenUpdating = True
+    
+    MsgBox "Removi o item da fila, mas não consegui apagar o bloco na planilha." & vbCrLf & _
+           "Motivo provável: aba/intervalo mudou ou foi apagado." & vbCrLf & _
+           "Itens restantes na fila: " & BankQueue.Count & ".", _
+           vbExclamation, "REMOVER BANCO"
+End Sub
+``

@@ -1,0 +1,272 @@
+Option Explicit
+
+' ==========================
+' CONFIGURAÇÕES
+' ==========================
+Private Const MAIN_SHEET As String = "INFORMES"
+Private Const SRC_ADDR As String = "C11:D13"
+Private Const FIRST_DATA_ROW As Long = 11        ' linha base p/ procurar vazios na coluna C
+Private Const DEST_COL As Long = 3               ' Coluna C
+Private Const LOG_SHEET As String = "_LOG_BANCOS" ' Nome da aba de log (oculta)
+
+' Fila/Pilha em memória (cada item = Dictionary)
+Public BankQueue As Collection
+
+' ==========================
+' INICIALIZAÇÃO (memória + log)
+' ==========================
+Public Sub InitQueue()
+    If BankQueue Is Nothing Then Set BankQueue = New Collection
+End Sub
+
+Public Sub EnsureLogSheet()
+    Dim wsLog As Worksheet
+    
+    On Error Resume Next
+    Set wsLog = ThisWorkbook.Worksheets(LOG_SHEET)
+    On Error GoTo 0
+    
+    If wsLog Is Nothing Then
+        ' Cria a aba de log
+        Set wsLog = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+        wsLog.Name = LOG_SHEET
+        
+        ' Cabeçalhos
+        With wsLog
+            .Range("A1").Value = "ID"
+            .Range("B1").Value = "DataHora"
+            .Range("C1").Value = "SheetName"
+            .Range("D1").Value = "DestAddress"
+            .Range("E1").Value = "C1"
+            .Range("F1").Value = "C2"
+            .Range("G1").Value = "C3"
+            .Range("H1").Value = "D1"
+            .Range("I1").Value = "D2"
+            .Range("J1").Value = "D3"
+            .Rows(1).Font.Bold = True
+        End With
+    End If
+    
+    ' Deixa bem oculto (não aparece em Reexibir)
+    wsLog.Visible = xlSheetVeryHidden
+End Sub
+
+Public Sub LoadQueueFromLog()
+    Dim wsLog As Worksheet
+    Dim lastRow As Long, r As Long
+    Dim item As Object
+    
+    InitQueue
+    EnsureLogSheet
+    
+    Set wsLog = ThisWorkbook.Worksheets(LOG_SHEET)
+    
+    ' Limpa a fila em memória e reconstrói
+    Set BankQueue = New Collection
+    
+    lastRow = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 2 Then Exit Sub ' sem registros
+    
+    For r = 2 To lastRow
+        Set item = CreateObject("Scripting.Dictionary")
+        
+        item("ID") = wsLog.Cells(r, "A").Value
+        item("DateTime") = wsLog.Cells(r, "B").Value
+        item("SheetName") = wsLog.Cells(r, "C").Value
+        item("DestAddress") = wsLog.Cells(r, "D").Value
+        
+        ' Dados armazenados (opcional, mas útil)
+        item("C") = Array(wsLog.Cells(r, "E").Value, wsLog.Cells(r, "F").Value, wsLog.Cells(r, "G").Value)
+        item("D") = Array(wsLog.Cells(r, "H").Value, wsLog.Cells(r, "I").Value, wsLog.Cells(r, "J").Value)
+        
+        BankQueue.Add item
+    Next r
+End Sub
+
+' ==========================
+' UTILITÁRIOS
+' ==========================
+Private Function GetSecondEmptyTopRow(ws As Worksheet, col As Long, firstDataRow As Long) As Long
+    Dim lastUsed As Long
+    lastUsed = ws.Cells(ws.Rows.Count, col).End(xlUp).Row
+    
+    If lastUsed < firstDataRow Then
+        GetSecondEmptyTopRow = firstDataRow + 1
+    Else
+        GetSecondEmptyTopRow = lastUsed + 2
+    End If
+End Function
+
+Private Function NextLogID(wsLog As Worksheet) As Long
+    Dim lastRow As Long
+    lastRow = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 2 Then
+        NextLogID = 1
+    Else
+        NextLogID = CLng(wsLog.Cells(lastRow, "A").Value) + 1
+    End If
+End Function
+
+Private Sub AppendToLog(item As Object)
+    Dim wsLog As Worksheet
+    Dim r As Long
+    
+    EnsureLogSheet
+    Set wsLog = ThisWorkbook.Worksheets(LOG_SHEET)
+    
+    r = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row + 1
+    
+    wsLog.Cells(r, "A").Value = item("ID")
+    wsLog.Cells(r, "B").Value = item("DateTime")
+    wsLog.Cells(r, "C").Value = item("SheetName")
+    wsLog.Cells(r, "D").Value = item("DestAddress")
+    
+    ' Salva os valores (3 linhas) para referência
+    wsLog.Cells(r, "E").Value = item("C")(0)
+    wsLog.Cells(r, "F").Value = item("C")(1)
+    wsLog.Cells(r, "G").Value = item("C")(2)
+    
+    wsLog.Cells(r, "H").Value = item("D")(0)
+    wsLog.Cells(r, "I").Value = item("D")(1)
+    wsLog.Cells(r, "J").Value = item("D")(2)
+    
+    ' Mantém oculto
+    wsLog.Visible = xlSheetVeryHidden
+End Sub
+
+Private Sub RemoveLastLogRow()
+    Dim wsLog As Worksheet
+    Dim lastRow As Long
+    
+    EnsureLogSheet
+    Set wsLog = ThisWorkbook.Worksheets(LOG_SHEET)
+    
+    lastRow = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row
+    If lastRow >= 2 Then wsLog.Rows(lastRow).Delete
+    
+    wsLog.Visible = xlSheetVeryHidden
+End Sub
+
+' ==========================
+' BOTÃO: INSERIR NOVO BANCO
+' ==========================
+Public Sub INSERIR_NOVO_BANCO()
+    Dim ws As Worksheet
+    Dim wsLog As Worksheet
+    Dim src As Range, dest As Range
+    Dim targetTop As Long
+    Dim item As Object
+    
+    Dim arrC(0 To 2) As Variant
+    Dim arrD(0 To 2) As Variant
+    
+    InitQueue
+    EnsureLogSheet
+    
+    Set ws = ThisWorkbook.Worksheets(MAIN_SHEET)
+    Set wsLog = ThisWorkbook.Worksheets(LOG_SHEET)
+    
+    Set src = ws.Range(SRC_ADDR)
+    
+    ' Define destino (topo do bloco 3x2)
+    targetTop = GetSecondEmptyTopRow(ws, DEST_COL, FIRST_DATA_ROW)
+    Set dest = ws.Cells(targetTop, DEST_COL).Resize(3, 2)
+    
+    ' Monta o item (objeto) e registra destino
+    Set item = CreateObject("Scripting.Dictionary")
+    item("ID") = NextLogID(wsLog)
+    item("DateTime") = Now
+    item("SheetName") = ws.Name
+    item("DestAddress") = dest.Address(False, False)
+    
+    ' Captura valores (3 linhas) para guardar no log/fila
+    arrC(0) = src.Cells(1, 1).Value
+    arrC(1) = src.Cells(2, 1).Value
+    arrC(2) = src.Cells(3, 1).Value
+    
+    arrD(0) = src.Cells(1, 2).Value
+    arrD(1) = src.Cells(2, 2).Value
+    arrD(2) = src.Cells(3, 2).Value
+    
+    item("C") = arrC
+    item("D") = arrD
+    
+    ' 1) Cola valores + formatação no destino
+    Application.ScreenUpdating = False
+    
+    src.Copy
+    dest.PasteSpecial Paste:=xlPasteFormats
+    dest.PasteSpecial Paste:=xlPasteValues
+    
+    Application.CutCopyMode = False
+    Application.ScreenUpdating = True
+    
+    ' 2) Adiciona na memória e persiste no LOG
+    BankQueue.Add item
+    AppendToLog item
+    
+    MsgBox "Bloco inserido em " & dest.Address(False, False) & vbCrLf & _
+           "Itens na fila: " & BankQueue.Count & ".", _
+           vbInformation, "INSERIR NOVO BANCO"
+End Sub
+
+' =====================
+' BOTÃO: REMOVER BANCO
+' remove da fila e apaga o último bloco colado (CLEAR)
+' =====================
+Public Sub REMOVER_BANCO()
+    Dim item As Object
+    Dim ws As Worksheet
+    Dim rng As Range
+    
+    InitQueue
+    EnsureLogSheet
+    
+    If BankQueue.Count = 0 Then
+        ' Segurança extra: tenta reconstruir caso a memória esteja vazia mas o log tenha itens
+        LoadQueueFromLog
+    End If
+    
+    If BankQueue.Count = 0 Then
+        MsgBox "A fila está vazia. Não há item para remover.", _
+               vbExclamation, "REMOVER BANCO"
+        Exit Sub
+    End If
+    
+    Set item = BankQueue(BankQueue.Count)
+    
+    On Error GoTo Falha
+    
+    Set ws = ThisWorkbook.Worksheets(CStr(item("SheetName")))
+    Set rng = ws.Range(CStr(item("DestAddress")))
+    
+    Application.ScreenUpdating = False
+    
+    ' Apaga tudo (valores + formatação etc.)
+    rng.Clear
+    
+    Application.ScreenUpdating = True
+    
+    ' Remove da fila (memória) e do LOG (última linha)
+    BankQueue.Remove BankQueue.Count
+    RemoveLastLogRow
+    
+    MsgBox "Último item removido e bloco apagado." & vbCrLf & _
+           "Itens restantes na fila: " & BankQueue.Count & ".", _
+           vbInformation, "REMOVER BANCO"
+    Exit Sub
+    
+Falha:
+    Application.ScreenUpdating = True
+    
+    ' Mesmo se falhar, remove da fila e do log para não travar o fluxo
+    On Error Resume Next
+    BankQueue.Remove BankQueue.Count
+    RemoveLastLogRow
+    On Error GoTo 0
+    
+    MsgBox "Removi o item da fila/log, mas não consegui apagar o bloco na planilha." & vbCrLf & _
+           "Possível causa: a aba/intervalo foi alterado." , _
+           vbExclamation, "REMOVER BANCO"
+End Sub
+``

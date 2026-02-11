@@ -1,0 +1,9 @@
+Option Explicit
+
+Private Sub Workbook_Open()
+    ' Reconstrói a fila a partir do LOG ao abrir
+    On Error Resume Next
+    EnsureLogSheet
+    LoadQueueFromLog
+    On Error GoTo 0
+End Sub
