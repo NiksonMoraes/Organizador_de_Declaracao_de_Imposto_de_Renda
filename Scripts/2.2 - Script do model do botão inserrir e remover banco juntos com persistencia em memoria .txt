@@ -205,9 +205,6 @@ Public Sub INSERIR_NOVO_BANCO()
     BankQueue.Add item
     AppendToLog item
     
-    MsgBox "Bloco inserido em " & dest.Address(False, False) & vbCrLf & _
-           "Itens na fila: " & BankQueue.Count & ".", _
-           vbInformation, "INSERIR NOVO BANCO"
 End Sub
 
 ' =====================
@@ -251,9 +248,6 @@ Public Sub REMOVER_BANCO()
     BankQueue.Remove BankQueue.Count
     RemoveLastLogRow
     
-    MsgBox "Último item removido e bloco apagado." & vbCrLf & _
-           "Itens restantes na fila: " & BankQueue.Count & ".", _
-           vbInformation, "REMOVER BANCO"
     Exit Sub
     
 Falha:
@@ -265,8 +259,4 @@ Falha:
     RemoveLastLogRow
     On Error GoTo 0
     
-    MsgBox "Removi o item da fila/log, mas não consegui apagar o bloco na planilha." & vbCrLf & _
-           "Possível causa: a aba/intervalo foi alterado." , _
-           vbExclamation, "REMOVER BANCO"
 End Sub
-``
