@@ -1,6 +1,6 @@
 # Organizador_de_Declaracao_de_Imposto_de_Renda (Excel + VBA)
 
-Formato: Excel .xlsm com macros e UI “app‑like” (menu lateral com botões, navegação entre abas, e ações para incluir/remover registros), pensado para organizar e consolidar informações da declaração do IRPF sem dar “cara de planilha”. [Organizado...o de Renda | Excel]
+Formato: Excel .xlsm com macros e UI (menu lateral com botões, navegação entre abas, e ações para incluir/remover registros), pensado para organizar e consolidar informações da declaração do IRPF sem dar “cara de planilha”. [Organizado...o de Renda | Excel]
 
 Visão Geral
 
